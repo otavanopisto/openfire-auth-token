@@ -25,6 +25,7 @@ import java.security.Signature;
 import java.security.SignatureException;
 import java.security.spec.InvalidKeySpecException;
 import java.security.spec.X509EncodedKeySpec;
+import java.time.Instant;
 
 import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.codec.digest.DigestUtils;
@@ -48,60 +49,65 @@ public class SignedTokenAuthProvider implements AuthProvider {
         ConnectionException,
         InternalUnauthenticatedException
     {
-        String timestampMaxDiffString = JiveGlobals.getProperty(
-                "fi.otavanopisto.openfire.auth.token.timestamp_max_diff",
-                "");
-        long timestampMaxDiff;
+        Log.setDebugEnabled(true);
         try {
-            timestampMaxDiff = Long.valueOf(timestampMaxDiffString);
-        } catch (NumberFormatException ex) {
-            Log.error("Invalid timestamp max diff", ex);
-            timestampMaxDiff = 10_000;
-        }
+            String timestampMaxDiffString = JiveGlobals.getProperty(
+                    "fi.otavanopisto.openfire.auth.token.timestamp_max_diff",
+                    "");
+            long timestampMaxDiff;
+            try {
+                timestampMaxDiff = Long.valueOf(timestampMaxDiffString);
+            } catch (NumberFormatException ex) {
+                Log.error("Invalid timestamp max diff", ex);
+                timestampMaxDiff = 15;
+            }
 
-        String[] parts = password.split(",");
+            String[] parts = password.split(",");
 
-        if (parts.length != 3) {
-            Log.debug("Ill-formed password");
-            throw new UnauthorizedException("Ill-formed password");
-        }
+            if (parts.length != 3) {
+                Log.debug("Ill-formed password");
+                throw new UnauthorizedException("Ill-formed password");
+            }
 
-        String pwTimestamp = parts[0];
-        String pwUser = parts[1];
-        String pwSignature = parts[2];
-        String payload = pwTimestamp + "," + pwUser;
+            String pwTimestamp = parts[0];
+            String pwUser = parts[1];
+            String pwSignature = parts[2];
+            String payload = pwTimestamp + "," + pwUser;
 
-        try {
-          if (!verifyMessage(payload, pwSignature)) {
-              Log.debug("Invalid signature");
-              throw new UnauthorizedException("Invalid signature");
-          }
-        } catch ( NoSuchAlgorithmException
-                | InvalidKeySpecException
-                | InvalidKeyException
-                | SignatureException ex) {
-          Log.error(ex);
-          throw new RuntimeException(ex);
-        }
+            try {
+              if (!verifyMessage(payload, pwSignature)) {
+                  Log.debug("Invalid signature");
+                  throw new UnauthorizedException("Invalid signature");
+              }
+            } catch ( NoSuchAlgorithmException
+                    | InvalidKeySpecException
+                    | InvalidKeyException
+                    | SignatureException ex) {
+              Log.error(ex);
+              throw new RuntimeException(ex);
+            }
 
-        long timestamp;
-        try {
-            timestamp = Long.parseLong(pwTimestamp);
-        } catch (NumberFormatException ex) {
-            Log.debug("Invalid number format");
-            throw new UnauthorizedException(ex);
-        }
+            long timestamp;
+            try {
+                timestamp = Long.parseLong(pwTimestamp);
+            } catch (NumberFormatException ex) {
+                Log.debug("Invalid number format");
+                throw new UnauthorizedException(ex);
+            }
 
-        long currentTimestamp = System.currentTimeMillis();
+            long currentTimestamp = Instant.now().getEpochSecond();
 
-        if (Math.abs(currentTimestamp - timestamp) > timestampMaxDiff) {
-            Log.debug("Expired token");
-            throw new UnauthorizedException("Expired token");
-        }
+            if (Math.abs(currentTimestamp - timestamp) > timestampMaxDiff) {
+                Log.debug("Expired token");
+                throw new UnauthorizedException("Expired token");
+            }
 
-        if (!StringUtils.equalsIgnoreCase(user, pwUser)) {
-            Log.debug("Invalid user in token");
-            throw new UnauthorizedException("Invalid user in token");
+            if (!StringUtils.equalsIgnoreCase(user, pwUser)) {
+                Log.debug("Invalid user in token");
+                throw new UnauthorizedException("Invalid user in token");
+            }
+        } finally {
+            Log.setDebugEnabled(false);
         }
     }
 

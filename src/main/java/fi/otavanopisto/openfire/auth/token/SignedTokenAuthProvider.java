@@ -1,13 +1,33 @@
 /*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
+ *  A signed token auth provider for OpenFire
+ *  Copyright (C) 2017 Otavan opisto
+ *
+ *  This program is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation, either version 3 of the License, or
+ *  (at your option) any later version.
+ * 
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ * 
+ *  You should have received a copy of the GNU General Public License
+ *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 package fi.otavanopisto.openfire.auth.token;
 
-import java.nio.charset.StandardCharsets;
-import org.abstractj.kalium.encoders.Encoder;
-import org.abstractj.kalium.keys.VerifyKey;
+import java.security.InvalidKeyException;
+import java.security.KeyFactory;
+import java.security.NoSuchAlgorithmException;
+import java.security.PublicKey;
+import java.security.Signature;
+import java.security.SignatureException;
+import java.security.spec.InvalidKeySpecException;
+import java.security.spec.X509EncodedKeySpec;
+
+import org.apache.commons.codec.binary.Base64;
+import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.jivesoftware.openfire.auth.AuthProvider;
 import org.jivesoftware.openfire.auth.ConnectionException;
@@ -17,11 +37,7 @@ import org.jivesoftware.openfire.user.UserNotFoundException;
 import org.jivesoftware.util.JiveGlobals;
 import org.jivesoftware.util.Log;
 
-
-/**
- *
- * @author Ilmo Euro <ilmo.euro@gmail.com>
- */
+@SuppressWarnings("deprecation")
 public class SignedTokenAuthProvider implements AuthProvider {
 
     @Override
@@ -32,9 +48,6 @@ public class SignedTokenAuthProvider implements AuthProvider {
         ConnectionException,
         InternalUnauthenticatedException
     {
-        String verifyKeyHex = JiveGlobals.getProperty(
-                "fi.otavanopisto.openfire.auth.token.verify_key",
-                "");
         String timestampMaxDiffString = JiveGlobals.getProperty(
                 "fi.otavanopisto.openfire.auth.token.timestamp_max_diff",
                 "");
@@ -45,12 +58,6 @@ public class SignedTokenAuthProvider implements AuthProvider {
             Log.error("Invalid timestamp max diff", ex);
             timestampMaxDiff = 10_000;
         }
-
-        Log.setDebugEnabled(true);
-
-        Log.debug("Verify key:" + verifyKeyHex);
-        Log.debug("User:" + user);
-        Log.debug("Password:" + password);
 
         String[] parts = password.split(",");
 
@@ -64,13 +71,17 @@ public class SignedTokenAuthProvider implements AuthProvider {
         String pwSignature = parts[2];
         String payload = pwTimestamp + "," + pwUser;
 
-        VerifyKey verifyKey = new VerifyKey(verifyKeyHex, Encoder.HEX);
-        byte[] signature = Encoder.HEX.decode(pwSignature);
-        byte[] message = payload.getBytes(StandardCharsets.UTF_8);
-
-        if (!verifyKey.verify(message, signature)) {
-            Log.debug("Invalid signature");
-            throw new UnauthorizedException("Invalid signature");
+        try {
+          if (!verifyMessage(payload, pwSignature)) {
+              Log.debug("Invalid signature");
+              throw new UnauthorizedException("Invalid signature");
+          }
+        } catch ( NoSuchAlgorithmException
+                | InvalidKeySpecException
+                | InvalidKeyException
+                | SignatureException ex) {
+          Log.error(ex);
+          throw new RuntimeException(ex);
         }
 
         long timestamp;
@@ -136,4 +147,24 @@ public class SignedTokenAuthProvider implements AuthProvider {
         throw new UnsupportedOperationException("Not supported by backend.");
     }
     
+    private boolean verifyMessage(String message, String signature)
+            throws NoSuchAlgorithmException,
+                   InvalidKeySpecException,
+                   SignatureException,
+                   InvalidKeyException {
+        String verifyKey = JiveGlobals.getProperty(
+                "fi.otavanopisto.openfire.auth.token.verify_key",
+                "");
+        byte[] keyBytes = Base64.decodeBase64(verifyKey);
+        X509EncodedKeySpec spec = new X509EncodedKeySpec(keyBytes);
+        KeyFactory kf = KeyFactory.getInstance("RSA");
+        PublicKey key = kf.generatePublic(spec);
+        byte[] hash = DigestUtils.sha256(message);
+        byte[] signatureBytes = Base64.decodeBase64(signature);
+        
+        Signature sig = Signature.getInstance("SHA1withRSA");
+        sig.initVerify(key);
+        sig.update(hash);
+        return sig.verify(signatureBytes);
+    }
 }

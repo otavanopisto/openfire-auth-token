@@ -49,18 +49,18 @@
         <dependency>
             <groupId>org.jivesoftware</groupId>
             <artifactId>openfire</artifactId>
-            <version>4.1.4</version>
+            <version>4.1.5</version>
             <scope>provided</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.abstractj.kalium</groupId>
-            <artifactId>kalium</artifactId>
-            <version>0.6.0</version>
         </dependency>
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-lang3</artifactId>
             <version>3.5</version>
+        </dependency>
+        <dependency>
+            <groupId>commons-codec</groupId>
+            <artifactId>commons-codec</artifactId>
+            <version>1.10</version>
         </dependency>
     </dependencies>
 </project>

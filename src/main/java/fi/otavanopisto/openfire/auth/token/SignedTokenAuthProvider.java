@@ -103,8 +103,6 @@ public class SignedTokenAuthProvider implements AuthProvider {
             Log.debug("Invalid user in token");
             throw new UnauthorizedException("Invalid user in token");
         }
-
-        Log.setDebugEnabled(false);
     }
 
     @Override
